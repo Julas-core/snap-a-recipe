@@ -10,6 +10,7 @@ import Footer from './components/Footer';
 import LegalPage from './components/LegalPage';
 import { trackEvent } from './services/analytics';
 import ShoppingList, { ShoppingListItem } from './components/ShoppingList';
+import SavedRecipesGallery from './components/SavedRecipesGallery';
 
 const App: React.FC = () => {
   const [image, setImage] = useState<string | null>(null);
@@ -24,6 +25,7 @@ const App: React.FC = () => {
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [isShoppingListOpen, setIsShoppingListOpen] = useState<boolean>(false);
   const [language, setLanguage] = useState<string>('English');
+  const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +34,7 @@ const App: React.FC = () => {
   useEffect(() => {
     trackEvent('page_view');
   }, []);
-  
+
   // Load shopping list from localStorage on initial render
   useEffect(() => {
     try {
@@ -46,6 +48,39 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Load saved recipes from localStorage on initial render
+  useEffect(() => {
+    try {
+      const savedRecipesData = localStorage.getItem('savedRecipes');
+      if (savedRecipesData) {
+        const parsedRecipes = JSON.parse(savedRecipesData);
+        // Sort recipes by timestamp in descending order (newest first)
+        const sortedRecipes = parsedRecipes.sort((a: Recipe, b: Recipe) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+        setSavedRecipes(sortedRecipes);
+      }
+    } catch (error) {
+      console.error("Could not load saved recipes from local storage", error);
+      localStorage.removeItem('savedRecipes');
+    }
+  }, []);
+
+  // Update saved recipes in localStorage whenever savedRecipes changes
+  useEffect(() => {
+    if (savedRecipes) {
+      // Add timestamp to recipes if they don't have one
+      const recipesWithTimestamps = savedRecipes.map(recipe => {
+        if (!recipe.timestamp) {
+          return { ...recipe, timestamp: new Date().toISOString() };
+        }
+        return recipe;
+      });
+
+      // Sort recipes by timestamp in descending order (newest first)
+      const sortedRecipes = recipesWithTimestamps.sort((a: Recipe, b: Recipe) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      localStorage.setItem('savedRecipes', JSON.stringify(sortedRecipes));
+    }
+  }, [savedRecipes]);
+
   const updateShoppingList = (newList: ShoppingListItem[]) => {
     setShoppingList(newList);
     localStorage.setItem('shoppingList', JSON.stringify(newList));
@@ -55,26 +90,122 @@ const App: React.FC = () => {
     if (shoppingList.some(item => item.recipeName === recipe.recipeName)) {
       return; // Already in the list
     }
-  
-    const newItems = recipe.ingredients.map(ingredient => ({
-      text: ingredient,
-      checked: false,
-      recipeName: recipe.recipeName,
-    }));
-  
+
+    // Common household items and common ingredients that people typically already have
+    const householdItems = new Set([
+      'water', 'salt', 'pepper', 'black pepper', 'oil', 'olive oil', 'cooking oil', 'sugar',
+      'butter', 'garlic', 'onion', 'garlic powder', 'onion powder', 'paprika', 'cumin',
+      'cayenne pepper', 'chili powder', 'oregano', 'thyme', 'basil', 'rosemary', 'bay leaves',
+      'soy sauce', 'vinegar', 'lemon juice', 'lime juice', 'honey', 'flour', 'milk', 'egg', 'eggs',
+      'baking powder', 'baking soda', 'vanilla extract', 'cinnamon', 'nutmeg', 'cloves', 'allspice',
+      'coriander', 'cardamom', 'ginger', 'turmeric', 'parsley', 'cilantro', 'chives', 'dill',
+      'mustard', 'ketchup', 'mayonnaise', 'yeast', 'yeast flakes', 'yeast powder', 'yeast granules',
+      'yeast extract', 'mushrooms', 'tomato', 'tomatoes', 'potato', 'potatoes', 'carrot', 'carrots',
+      'celery', 'lettuce', 'spinach', 'pepper', 'bell pepper', 'bell peppers', 'cheese', 'cheeses'
+    ]);
+
+    // Function to strip measurements from ingredients
+    const stripMeasurements = (ingredient: string): string => {
+      // Remove common measurement patterns like "1 cup", "2 tablespoons", "1/2 tsp", etc.
+      return ingredient
+        .replace(/^\d+\s*(\/\d+)?\s*(cups?|tablespoons?|teaspoons?|pieces?|slices?|cloves?|pinches?|drops?|pounds?|ounces?|grams?|kilograms?|liters?|ml|lbs?|kg|g|l|tbsp|tsp|oz|lb|kgs?|gs?|mls?|ls?|quarts?|pints?)\s*/i, '')
+        .replace(/^\d+\s*(\/\d+)?\s*to\s*\d+\s*(\/\d+)?\s*(cups?|tablespoons?|teaspoons?|pieces?|slices?|cloves?|pinches?|drops?|pounds?|ounces?|grams?|kilograms?|liters?|ml|lbs?|kg|g|l|tbsp|tsp|oz|lb|kgs?|gs?|mls?|ls?|quarts?|pints?)\s*/i, '')
+        .replace(/^\s*(a|an)\s+(cups?|tablespoons?|teaspoons?|pieces?|slices?|cloves?|pinches?|drops?|pounds?|ounces?|grams?|kilograms?|liters?|ml|lbs?|kg|g|l|tbsp|tsp|oz|lb|kgs?|gs?|mls?|ls?|quarts?|pints?)\s*/i, '')
+        .trim();
+    };
+
+    // Function to check if an ingredient is a household item
+    const isHouseholdItem = (ingredient: string): boolean => {
+      const lowerCaseIngredient = ingredient.toLowerCase();
+      for (const item of householdItems) {
+        // Check for exact matches or ingredients that contain the household item
+        if (lowerCaseIngredient.includes(item) &&
+            // Additional check to avoid excluding ingredients that just contain a common word
+            // as part of a longer ingredient name (e.g., "pepper" shouldn't exclude "peppercorn")
+            (lowerCaseIngredient === item || lowerCaseIngredient.startsWith(item + ' ') ||
+             lowerCaseIngredient.endsWith(' ' + item) || lowerCaseIngredient.includes(' ' + item + ' '))) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const newItems = recipe.ingredients
+      .filter(ingredient => {
+        // Filter out household items
+        if (isHouseholdItem(ingredient)) {
+          return false;
+        }
+
+        // Also filter out ingredients that are just quantities without meaningful ingredient names
+        // For example, "1 cup warm water" would be filtered out because "water" is a household item
+        // But also filter out things like "to taste", "as needed", etc.
+        const strippedIngredient = stripMeasurements(ingredient).toLowerCase();
+        if (strippedIngredient === 'to taste' ||
+            strippedIngredient === 'as needed' ||
+            strippedIngredient === 'for garnish' ||
+            strippedIngredient === 'optional') {
+          return false;
+        }
+
+        return true;
+      })
+      .map(ingredient => {
+        // Strip measurements and return just the ingredient name
+        let cleanedIngredient = stripMeasurements(ingredient);
+
+        // Remove common descriptors after the main ingredient
+        cleanedIngredient = cleanedIngredient.replace(/\b(.*?)(,\s*fresh.*|,\s*chopped.*|,\s*minced.*|,\s*grated.*|,\s*ground.*|,\s*sliced.*|,\s*diced.*)$/i, '$1');
+        cleanedIngredient = cleanedIngredient.replace(/\b(fresh|dried|ground|chopped|minced|grated|sliced|diced)\s*/gi, '');
+
+        // Clean up any extra whitespace or trailing commas
+        cleanedIngredient = cleanedIngredient.replace(/\s*,\s*$/, '').trim();
+
+        return {
+          text: cleanedIngredient,
+          checked: false,
+          recipeName: recipe.recipeName,
+        };
+      });
+
     updateShoppingList([...shoppingList, ...newItems]);
   };
-  
+
   const handleToggleShoppingListItem = (itemText: string, recipeName: string) => {
     const newList = shoppingList.map(item =>
       item.text === itemText && item.recipeName === recipeName ? { ...item, checked: !item.checked } : item
     );
     updateShoppingList(newList);
   };
-  
+
   const handleClearShoppingList = () => {
     updateShoppingList([]);
     setIsShoppingListOpen(false); // Close modal on clear
+  };
+
+  const handleSaveRecipe = (recipe: Recipe) => {
+    if (!recipe.recipeName) return; // Don't save recipes without names
+
+    // Check if recipe is already saved
+    const existingRecipeIndex = savedRecipes.findIndex(r => r.recipeName === recipe.recipeName);
+
+    if (existingRecipeIndex !== -1) {
+      // Recipe already exists, don't duplicate it
+      return;
+    }
+
+    // Add timestamp to the recipe
+    const recipeWithTimestamp = { ...recipe, timestamp: new Date().toISOString() };
+
+    // Add the new recipe and maintain only the most recent recipes
+    setSavedRecipes(prev => [recipeWithTimestamp, ...prev]); // Newest at the beginning
+
+    trackEvent('save_recipe', { recipe_name: recipe.recipeName });
+  };
+
+  const handleDeleteRecipe = (recipeName: string) => {
+    setSavedRecipes(prev => prev.filter(recipe => recipe.recipeName !== recipeName));
+    trackEvent('delete_recipe', { recipe_name: recipeName });
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,7 +235,8 @@ const App: React.FC = () => {
 
     try {
       const generatedRecipe = await generateRecipeFromImage(image, language);
-      setActiveRecipe({ ...generatedRecipe, imageUrl: image });
+      const recipeWithImage = { ...generatedRecipe, imageUrl: image };
+      setActiveRecipe(recipeWithImage);
       setImageUrl(image);
       trackEvent('generate_recipe', { success: true, recipe_name: generatedRecipe.recipeName });
     } catch (e: any) {
@@ -229,7 +361,7 @@ const App: React.FC = () => {
         onToggleItem={(text, name) => handleToggleShoppingListItem(text, name)}
         onClear={handleClearShoppingList}
       />
-      
+
       <header className="w-full max-w-7xl text-center mb-8 relative no-print">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-amber-900 drop-shadow-sm font-serif">
           Snap-a-Recipe
@@ -252,14 +384,14 @@ const App: React.FC = () => {
             </button>
         </div>
       </header>
-      
+
       <main className="w-full max-w-7xl flex-grow flex flex-col items-center print:max-w-none print:w-full print:block">
         <div className="w-full flex-grow flex flex-col justify-center items-center">
             {!image && !imageToCrop && !activeRecipe && (
               <div className="w-full max-w-4xl bg-white/60 backdrop-blur-sm p-8 rounded-2xl shadow-lg text-center animate-fade-in no-print">
                   <h2 className="text-2xl font-semibold mb-4 font-serif">Get Started</h2>
                   <p className="text-amber-800 mb-6">Choose how to provide an image of your meal:</p>
-                  
+
                   <div className="max-w-xs mx-auto mb-6">
                     <label htmlFor="language-select" className="block text-sm font-medium text-amber-800 mb-2">Recipe Language</label>
                     <select
@@ -299,6 +431,17 @@ const App: React.FC = () => {
                       </button>
                       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
                   </div>
+
+                  {/* Saved Recipes Gallery - shown below the main buttons */}
+                  <SavedRecipesGallery
+                    recipes={savedRecipes}
+                    onSelect={recipe => {
+                      setActiveRecipe(recipe);
+                      setImageUrl(recipe.imageUrl || null);
+                    }}
+                    onDelete={handleDeleteRecipe}
+                    onBackToHome={() => resetState(true)}
+                  />
               </div>
             )}
 
@@ -335,10 +478,13 @@ const App: React.FC = () => {
                       </div>
                   ) : activeRecipe ? (
                       <div className="animate-fade-in">
-                          <RecipeDisplay 
-                            recipe={activeRecipe} 
+                          <RecipeDisplay
+                            recipe={activeRecipe}
                             onAddToShoppingList={handleAddToShoppingList}
                             isRecipeInShoppingList={isCurrentRecipeInShoppingList}
+                            onSaveRecipe={handleSaveRecipe}
+                            isRecipeSaved={savedRecipes.some(r => r.recipeName === activeRecipe?.recipeName)}
+                            onBackToHome={() => resetState(true)}
                           />
                       </div>
                   ) : (
@@ -355,7 +501,7 @@ const App: React.FC = () => {
               </div>
             )}
         </div>
-        
+
         <Footer onLinkClick={setViewingLegal} />
       </main>
     </div>

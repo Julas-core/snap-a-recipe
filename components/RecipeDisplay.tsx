@@ -6,9 +6,12 @@ interface RecipeDisplayProps {
   recipe: Recipe;
   onAddToShoppingList?: (recipe: Recipe) => void;
   isRecipeInShoppingList?: boolean;
+  onSaveRecipe?: (recipe: Recipe) => void;
+  isRecipeSaved?: boolean;
+  onBackToHome?: () => void;
 }
 
-const RecipeDisplay: React.FC<RecipeDisplayProps> = ({ recipe, onAddToShoppingList, isRecipeInShoppingList }) => {
+const RecipeDisplay: React.FC<RecipeDisplayProps> = ({ recipe, onAddToShoppingList, isRecipeInShoppingList, onSaveRecipe, isRecipeSaved }) => {
   const [checkedIngredients, setCheckedIngredients] = useState<Set<number>>(new Set());
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [isKitchenMode, setIsKitchenMode] = useState(false);
@@ -179,23 +182,55 @@ const RecipeDisplay: React.FC<RecipeDisplayProps> = ({ recipe, onAddToShoppingLi
 
       {/* Main Recipe Display */}
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 md:p-8 w-full print:bg-white print:shadow-none print:p-0">
+        {/* Back to home button */}
+        <div className="mb-4 no-print">
+          <button
+            onClick={() => { if (onBackToHome) onBackToHome(); }}
+            className="flex items-center gap-2 px-3 py-2 bg-amber-100 text-amber-800 font-semibold rounded-lg shadow-sm hover:bg-amber-200 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            Home
+          </button>
+        </div>
+
+        {/* Food Image */}
+        {recipe.imageUrl && (
+          <div className="mb-6 flex justify-center">
+            <img
+              src={recipe.imageUrl}
+              alt={recipe.recipeName}
+              className="rounded-xl object-cover max-h-64 w-full max-w-2xl"
+            />
+          </div>
+        )}
+
         <div className="text-center print:text-left">
           <h2 className="text-3xl md:text-4xl font-bold text-amber-900 font-serif mb-2 print:text-4xl">{recipe.recipeName}</h2>
           <p className="text-amber-800/90 text-center max-w-3xl mx-auto mb-6 print:text-black print:text-left print:max-w-none print:mx-0 break-words">
             {recipe.description}
           </p>
         </div>
-        
+
         {/* Action Buttons */}
         <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-8 border-t border-b border-amber-200 py-4 no-print">
             <button onClick={() => setIsKitchenMode(true)} className="flex items-center gap-2 px-3 py-2 text-sm sm:px-4 sm:py-2 bg-amber-100 text-amber-800 font-semibold rounded-lg shadow-sm hover:bg-amber-200 transition-all"><KitchenIcon className="w-5 h-5"/> Kitchen Mode</button>
             {onAddToShoppingList && (
-                <button 
+                <button
                   onClick={() => onAddToShoppingList(recipe)}
                   disabled={isRecipeInShoppingList}
                   className="flex items-center gap-2 px-3 py-2 text-sm sm:px-4 sm:py-2 bg-amber-100 text-amber-800 font-semibold rounded-lg shadow-sm hover:bg-amber-200 transition-all disabled:bg-amber-200/50 disabled:text-amber-800/60 disabled:cursor-not-allowed">
                   <ShoppingCartIcon className="w-5 h-5"/>
                   {isRecipeInShoppingList ? 'Added to List' : 'Add to Shopping List'}
+                </button>
+            )}
+            {onSaveRecipe && (
+                <button
+                  onClick={() => onSaveRecipe(recipe)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm sm:px-4 sm:py-2 bg-amber-100 text-amber-800 font-semibold rounded-lg shadow-sm hover:bg-amber-200 transition-all"
+                >
+                  {isRecipeSaved ? '✓ Saved' : 'Save Recipe'}
                 </button>
             )}
             <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 text-sm sm:px-4 sm:py-2 bg-amber-100 text-amber-800 font-semibold rounded-lg shadow-sm hover:bg-amber-200 transition-all"><PrintIcon className="w-5 h-5"/> Print</button>
